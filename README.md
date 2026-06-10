@@ -35,6 +35,24 @@ slightly different shapes. For best results, each record should contain:
 Irrelevance/no-tool samples are detected from task/category names or from empty
 gold tool calls.
 
+To generate a deterministic 1,000-row self-built training set:
+
+```powershell
+python scripts/generate_synthetic_tooluse_data.py `
+  --output data/raw_selfbuilt/synthetic_tooluse_1000.jsonl `
+  --count 1000 `
+  --seed 42
+```
+
+Then convert it for GRPO:
+
+```powershell
+python scripts/prepare_bfcl_dataset.py `
+  --input data/raw_selfbuilt `
+  --output data/grpo_train.jsonl `
+  --max-samples 1000
+```
+
 ## 2. Smoke Run
 
 Use your SFT model directory as `--model-path`. If your SFT artifact is a LoRA
