@@ -1,4 +1,4 @@
-# TRL GRPO for BFCL Tool Use
+﻿# ToolUseEnhanceProject
 
 This mini project starts from an existing SFT model and applies TRL `GRPOTrainer`
 with rule-based rewards for BFCL-style function calling.
@@ -168,3 +168,4 @@ accelerate launch scripts/train_grpo.py \
   --use-lora \
   --bf16
 ```
+
