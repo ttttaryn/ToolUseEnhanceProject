@@ -130,7 +130,18 @@ bash scripts/autodl_setup.sh
 ```
 
 Prepare BFCL data. If `data/raw` does not exist yet, either create it and copy
-your JSON/JSONL files there, or clone BFCL directly on AutoDL:
+your JSON/JSONL files there, or download only the small BFCL subset needed for
+this project:
+
+```bash
+python scripts/download_bfcl_subset.py --output-dir data/raw
+```
+
+If GitHub raw is also unstable in your AutoDL region, download the same files on
+your local machine and upload them into `data/raw/`, or pass a reachable mirror
+with `--base-url`.
+
+Full Gorilla clone is optional and may be slow on AutoDL:
 
 ```bash
 mkdir -p external
