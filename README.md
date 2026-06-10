@@ -1,201 +1,158 @@
-﻿# ToolUseEnhanceProject
+# ToolUseEnhanceProject
 
-This mini project starts from an existing SFT model and applies TRL `GRPOTrainer`
-with rule-based rewards for BFCL-style function calling.
+TRL-GRPO post-training for improving small-model tool-use ability on BFCL-style
+function calling tasks.
 
-## Layout
+This project starts from an existing SFT checkpoint of `Llama-3.2-1B-Instruct`
+and applies a lightweight GRPO stage with rule-based rewards. The goal is not to
+chase leaderboard-level absolute performance, but to explore whether targeted RL
+can reduce tool-use errors such as wrong tool selection, unnecessary tool calls,
+format failures, and parameter hallucination.
 
-- `scripts/prepare_bfcl_dataset.py`: converts BFCL-like JSON/JSONL files into a
-  JSONL dataset accepted by the training script.
-- `scripts/train_grpo.py`: runs TRL GRPO from an SFT model or LoRA adapter.
-- `scripts/evaluate_reward_file.py`: scores saved generations with the same
-  reward logic used in training.
-- `src/trl_grpo_tooluse/rewards.py`: format, tool-selection, argument, hallucination,
-  and brevity rewards.
-- `tests/test_rewards.py`: regression tests for the reward behavior.
+## Project Overview
 
-## 1. Prepare Data
+The course task focuses on tool use / function calling for small models. Our
+pipeline is:
 
-Put BFCL training or self-constructed samples under `data/raw/`, then convert:
-
-```powershell
-python scripts/prepare_bfcl_dataset.py `
-  --input data/raw `
-  --output data/grpo_train.jsonl `
-  --max-samples 3000
+```text
+Base Llama-3.2-1B-Instruct
+        -> SFT model
+        -> SFT + TRL GRPO
+        -> BFCL v4 evaluation
 ```
 
-The converter is intentionally tolerant because BFCL-style files appear in a few
-slightly different shapes. For best results, each record should contain:
+Official BFCL v4 files are used only for benchmark evaluation. GRPO training uses
+self-built BFCL-style data to avoid test leakage.
 
-- user request: `question`, `prompt`, `user`, or `messages`
-- tool schema: `function`, `functions`, `tools`, or `tool_list`
-- gold answer: `ground_truth`, `answer`, `possible_answer`, `gold`, or `reference`
+## Repository Layout
 
-Irrelevance/no-tool samples are detected from task/category names or from empty
-gold tool calls.
+```text
+scripts/
+  autodl_setup.sh                  AutoDL/A800 environment setup
+  generate_synthetic_tooluse_data.py
+                                    generate 1,000 self-built training records
+  prepare_bfcl_dataset.py           convert BFCL-style JSON/JSONL to GRPO JSONL
+  train_grpo.py                     TRL GRPO training entrypoint
+  download_bfcl_subset.py           optional BFCL JSON downloader
+  evaluate_reward_file.py           offline reward scoring helper
 
-To generate a deterministic 1,000-row self-built training set:
+src/trl_grpo_tooluse/
+  data_prep.py                      prompt and dataset conversion helpers
+  rewards.py                        rule-based GRPO reward functions
+  tool_parser.py                    tolerant tool-call parser
 
-```powershell
-python scripts/generate_synthetic_tooluse_data.py `
-  --output data/raw_selfbuilt/synthetic_tooluse_1000.jsonl `
-  --count 1000 `
+data/raw_selfbuilt/
+  synthetic_tooluse_1000.jsonl      self-built training data
+
+reports/
+  bfcl_13cat_summary.md             SFT vs GRPO BFCL summary table
+  bfcl_13cat_summary.csv            same table in CSV format
+
+tests/
+  unit tests for data conversion, parser, rewards, and script compatibility
+```
+
+Large local artifacts are intentionally ignored by Git:
+
+```text
+sft_model/
+outputs/
+data/grpo_train.jsonl
+*.safetensors
+```
+
+## Data
+
+The self-built training set contains 1,000 BFCL-style records:
+
+```text
+400 normal single-turn tool calls
+250 hard tool-selection cases
+250 irrelevance / no-tool cases
+100 missing-parameter or ambiguous-request cases
+```
+
+Regenerate it with:
+
+```bash
+python scripts/generate_synthetic_tooluse_data.py \
+  --output data/raw_selfbuilt/synthetic_tooluse_1000.jsonl \
+  --count 1000 \
   --seed 42
 ```
 
-Then convert it for GRPO:
-
-```powershell
-python scripts/prepare_bfcl_dataset.py `
-  --input data/raw_selfbuilt `
-  --output data/grpo_train.jsonl `
-  --max-samples 1000
-```
-
-## 2. Smoke Run
-
-Use your SFT model directory as `--model-path`. If your SFT artifact is a LoRA
-adapter, pass the base model via `--base-model-path`.
-
-```powershell
-accelerate launch scripts/train_grpo.py `
-  --model-path F:\ToolUseforAgent\sft_model `
-  --dataset data/grpo_train.jsonl `
-  --output-dir outputs/grpo_smoke `
-  --max-steps 30 `
-  --num-generations 4 `
-  --per-device-train-batch-size 1 `
-  --gradient-accumulation-steps 4 `
-  --use-lora
-```
-
-Add `--load-in-4bit` for QLoRA-style loading when your Linux CUDA environment
-has a compatible bitsandbytes install.
-
-For an adapter-only SFT artifact:
-
-```powershell
-accelerate launch scripts/train_grpo.py `
-  --model-path F:\ToolUseforAgent\sft_adapter `
-  --base-model-path F:\ToolUseforAgent\base_model `
-  --dataset data/grpo_train.jsonl `
-  --output-dir outputs/grpo_smoke `
-  --max-steps 30 `
-  --use-lora
-```
-
-## 3. Small Formal Run
-
-```powershell
-accelerate launch scripts/train_grpo.py `
-  --model-path F:\ToolUseforAgent\sft_model `
-  --dataset data/grpo_train.jsonl `
-  --output-dir outputs/grpo_full `
-  --max-steps 500 `
-  --num-generations 4 `
-  --learning-rate 5e-6 `
-  --beta 0.01 `
-  --use-lora
-```
-
-Recommended ablations:
-
-- full reward: default settings
-- no hallucination penalty: add `--disable-hallucination-penalty`
-- format + tool selection only: add `--reward-preset selection_only`
-- vary irrelevance ratio during dataset construction with `--irrelevance-ratio`
-
-## 4. Verification
-
-Run the local reward tests:
-
-```powershell
-python -m unittest discover -s tests
-```
-
-After training, evaluate Prompt-only, SFT, and GRPO checkpoints with the official
-BFCL flow, then report:
-
-- Single Turn accuracy
-- Hallucination relevance / irrelevance accuracy
-- format error rate
-- wrong-tool rate
-- parameter hallucination rate
-
-## Notes
-
-The reward parser accepts common tool-call forms, including JSON objects,
-OpenAI-style `tool_calls`, and simple `function(arguments)` text. Training still
-benefits from a strict system prompt, so the prepared prompts ask the model to
-return either a JSON tool call or a direct answer when no tool is needed.
-
-## AutoDL A800 Quickstart
-
-Recommended AutoDL instance:
-
-- GPU: single A800, preferably 80GB
-- Image: Ubuntu + PyTorch + CUDA 12.x
-- Disk: at least 80GB system/data space
-- Keep the instance data disk enabled so checkpoints are not lost when the
-  machine stops.
-
-After uploading this project and `sft_model/` to AutoDL:
-
-```bash
-cd /root/autodl-tmp/ToolUseforAgent
-bash scripts/autodl_setup.sh
-```
-
-Prepare BFCL data. If `data/raw` does not exist yet, either create it and copy
-your JSON/JSONL files there, or download only the small BFCL subset needed for
-this project:
-
-```bash
-python scripts/download_bfcl_subset.py --output-dir data/raw
-```
-
-If GitHub raw is also unstable in your AutoDL region, download the same files on
-your local machine and upload them into `data/raw/`, or pass a reachable mirror
-with `--base-url`.
-
-Full Gorilla clone is optional and may be slow on AutoDL:
-
-```bash
-mkdir -p external
-git clone --depth 1 https://github.com/ShishirPatil/gorilla.git external/gorilla
-```
-
-For a quick course-project GRPO dataset, copy only the single-turn and
-hallucination-oriented BFCL files you want to use for development:
-
-```bash
-mkdir -p data/raw
-cp external/gorilla/berkeley-function-call-leaderboard/bfcl_eval/data/BFCL_v4_simple_python.json data/raw/
-cp external/gorilla/berkeley-function-call-leaderboard/bfcl_eval/data/BFCL_v4_multiple.json data/raw/
-cp external/gorilla/berkeley-function-call-leaderboard/bfcl_eval/data/BFCL_v4_irrelevance.json data/raw/
-cp external/gorilla/berkeley-function-call-leaderboard/bfcl_eval/data/BFCL_v4_live_irrelevance.json data/raw/
-cp external/gorilla/berkeley-function-call-leaderboard/bfcl_eval/data/BFCL_v4_live_relevance.json data/raw/
-```
-
-Then convert the local files:
+Convert it to the JSONL format consumed by `GRPOTrainer`:
 
 ```bash
 python scripts/prepare_bfcl_dataset.py \
-  --input data/raw \
+  --input data/raw_selfbuilt \
   --output data/grpo_train.jsonl \
-  --max-samples 3000
+  --max-samples 1000
 ```
 
-For final benchmark reporting, do not train on the official test files you
-intend to report. Use the BFCL official `bfcl generate` / `bfcl evaluate` flow
-on Prompt-only, SFT, and SFT+GRPO checkpoints.
+The converter expects each source record to contain a user request, available
+tools, a gold answer, and a task type. It accepts common field names such as
+`question`, `prompt`, `tools`, `functions`, `ground_truth`, and `answer`.
 
-Smoke run:
+## Reward Design
+
+The GRPO reward is rule-based and does not require a separate reward model:
+
+```text
+R = format_reward
+  + tool_selection_reward
+  + argument_reward
+  + hallucination_penalty
+  + brevity_reward
+```
+
+- `format_reward`: rewards parseable tool calls, or direct answers for no-tool
+  samples.
+- `tool_selection_reward`: rewards choosing the correct tool and refusing tool
+  calls on irrelevance tasks.
+- `argument_reward`: scores parameter-key overlap and exact value matching.
+- `hallucination_penalty`: penalizes invented tools and schema-invalid
+  parameters.
+- `brevity_reward`: lightly discourages verbose malformed templates.
+
+The parser accepts JSON tool calls, OpenAI-style `tool_calls`, and simple
+`function(arguments)` strings so that partially valid model outputs can still
+receive informative rewards.
+
+## AutoDL A800 Setup
+
+Recommended instance:
+
+```text
+GPU: single A800, preferably 80GB
+Image: Ubuntu + PyTorch + CUDA 12.x
+Disk: at least 80GB
+```
+
+After cloning the repository and uploading `sft_model/`:
 
 ```bash
+cd /root/autodl-tmp/ToolUseEnhanceProject
+bash scripts/autodl_setup.sh
+```
+
+Check that the model directory contains:
+
+```text
+sft_model/config.json
+sft_model/tokenizer.json
+sft_model/model.safetensors
+```
+
+## GRPO Training
+
+First run a short smoke test:
+
+```bash
+mkdir -p logs outputs
+
 accelerate launch scripts/train_grpo.py \
-  --model-path /root/autodl-tmp/ToolUseforAgent/sft_model \
+  --model-path /root/autodl-tmp/ToolUseEnhanceProject/sft_model \
   --dataset data/grpo_train.jsonl \
   --output-dir outputs/grpo_smoke \
   --max-steps 30 \
@@ -203,22 +160,148 @@ accelerate launch scripts/train_grpo.py \
   --per-device-train-batch-size 1 \
   --gradient-accumulation-steps 4 \
   --use-lora \
-  --bf16
+  --bf16 \
+  2>&1 | tee logs/grpo_smoke.log
 ```
 
-Formal small run:
+Then run the formal small-scale experiment:
 
 ```bash
 accelerate launch scripts/train_grpo.py \
-  --model-path /root/autodl-tmp/ToolUseforAgent/sft_model \
+  --model-path /root/autodl-tmp/ToolUseEnhanceProject/sft_model \
   --dataset data/grpo_train.jsonl \
   --output-dir outputs/grpo_full \
   --max-steps 500 \
   --num-generations 4 \
   --learning-rate 5e-6 \
+  --beta 0.01 \
   --per-device-train-batch-size 1 \
   --gradient-accumulation-steps 4 \
   --use-lora \
-  --bf16
+  --bf16 \
+  2>&1 | tee logs/grpo_full.log
 ```
 
+Useful ablations:
+
+```bash
+# Remove hallucination penalty
+--disable-hallucination-penalty
+
+# Use only format + tool-selection rewards
+--reward-preset selection_only
+```
+
+If CUDA memory is tight, reduce prompt/completion length or add `--load-in-4bit`
+in a bitsandbytes-compatible Linux CUDA environment.
+
+## BFCL Evaluation
+
+The final benchmark uses official BFCL v4 categories. Do not train on the same
+official BFCL files used for reporting.
+
+The 13 categories aligned with the group SFT table are:
+
+```bash
+TEST_CATEGORIES="parallel_multiple,simple_python,parallel,simple_java,multiple,simple_javascript,irrelevance,live_irrelevance,live_parallel_multiple,live_multiple,live_parallel,live_simple,live_relevance"
+MODEL_ID="meta-llama/Llama-3.2-1B-Instruct-FC"
+```
+
+Evaluate the SFT checkpoint:
+
+```bash
+bfcl generate \
+  --model "$MODEL_ID" \
+  --test-category "$TEST_CATEGORIES" \
+  --backend vllm \
+  --num-gpus 1 \
+  --gpu-memory-utilization 0.85 \
+  --local-model-path /root/autodl-tmp/ToolUseEnhanceProject/sft_model \
+  --result-dir /root/autodl-tmp/ToolUseEnhanceProject/bfcl_runs/result_sft_13cat_fmt
+
+bfcl evaluate \
+  --model "$MODEL_ID" \
+  --test-category "$TEST_CATEGORIES" \
+  --result-dir /root/autodl-tmp/ToolUseEnhanceProject/bfcl_runs/result_sft_13cat_fmt \
+  --score-dir /root/autodl-tmp/ToolUseEnhanceProject/bfcl_runs/score_sft_13cat_fmt
+```
+
+Evaluate the GRPO LoRA adapter:
+
+```bash
+bfcl generate \
+  --model "$MODEL_ID" \
+  --test-category "$TEST_CATEGORIES" \
+  --backend vllm \
+  --num-gpus 1 \
+  --gpu-memory-utilization 0.85 \
+  --local-model-path /root/autodl-tmp/ToolUseEnhanceProject/sft_model \
+  --enable-lora \
+  --max-lora-rank 128 \
+  --lora-modules grpo=/root/autodl-tmp/ToolUseEnhanceProject/outputs/grpo_full \
+  --result-dir /root/autodl-tmp/ToolUseEnhanceProject/bfcl_runs/result_grpo_full_13cat_fmt
+
+bfcl evaluate \
+  --model "$MODEL_ID" \
+  --test-category "$TEST_CATEGORIES" \
+  --result-dir /root/autodl-tmp/ToolUseEnhanceProject/bfcl_runs/result_grpo_full_13cat_fmt \
+  --score-dir /root/autodl-tmp/ToolUseEnhanceProject/bfcl_runs/score_grpo_full_13cat_fmt
+```
+
+`format_sensitivity` can be evaluated separately, but it should not be averaged
+with the 13 ordinary accuracy categories.
+
+## Results
+
+The 13-category BFCL summary is:
+
+| Task | SFT | SFT+GRPO | Delta |
+|---|---:|---:|---:|
+| parallel_multiple | 72.00 | 72.50 | +0.50 |
+| simple_python | 83.75 | 83.75 | +0.00 |
+| parallel | 74.50 | 76.00 | +1.50 |
+| simple_java | 56.00 | 56.00 | +0.00 |
+| multiple | 85.00 | 83.00 | -2.00 |
+| simple_javascript | 64.00 | 62.00 | -2.00 |
+| irrelevance | 90.42 | 90.00 | -0.42 |
+| live_irrelevance | 83.37 | 83.37 | +0.00 |
+| live_parallel_multiple | 41.67 | 37.50 | -4.17 |
+| live_multiple | 48.91 | 49.10 | +0.19 |
+| live_parallel | 37.50 | 43.75 | +6.25 |
+| live_simple | 49.22 | 49.61 | +0.39 |
+| live_relevance | 75.00 | 75.00 | +0.00 |
+| **Average** | **66.26** | **66.28** | **+0.02** |
+
+GRPO mostly preserves the SFT baseline, with small gains on `parallel`,
+`parallel_multiple`, `live_parallel`, `live_multiple`, and `live_simple`, but
+some degradation on `multiple`, `simple_javascript`, and
+`live_parallel_multiple`. The average improvement is small, suggesting that the
+current 1,000-row synthetic dataset and rule-based reward are useful as a
+controlled exploration but are not yet enough to substantially improve the full
+BFCL distribution.
+
+## Verification
+
+Run the test suite:
+
+```bash
+python -m unittest discover -s tests
+```
+
+The tests cover:
+
+- reward behavior for correct calls, wrong tools, missing parameters, and
+  no-tool cases
+- dataset conversion error handling
+- synthetic data generation and task mix
+- BFCL subset downloader metadata
+- TRL `GRPOConfig` API compatibility filtering
+
+## Notes
+
+- `bfcl_runs/` is tracked so benchmark results can be archived.
+- `outputs/` is ignored because it may contain large LoRA checkpoints.
+- `sft_model/` is ignored because model weights are large and should be stored
+  separately.
+- BFCL `Overall Acc` can be misleading when only selected categories are run.
+  For this project, report the 13-category average shown above.
