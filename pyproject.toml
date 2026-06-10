@@ -1,0 +1,20 @@
+[project]
+name = "trl-grpo-tooluse"
+version = "0.1.0"
+description = "TRL GRPO pipeline for BFCL-style tool-use training on an SFT model."
+requires-python = ">=3.10"
+dependencies = [
+    "accelerate>=0.34.0",
+    "datasets>=2.20.0",
+    "peft>=0.12.0",
+    "torch>=2.3.0",
+    "transformers>=4.45.0",
+    "trl>=0.19.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"

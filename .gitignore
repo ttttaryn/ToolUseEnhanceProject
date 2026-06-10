@@ -1,0 +1,32 @@
+# Local models and large artifacts
+sft_model/
+base_model/
+*.safetensors
+*.bin
+*.pt
+*.pth
+
+# Datasets and generated outputs
+data/
+outputs/
+bfcl_runs/
+.tmp/
+
+# Python caches and environments
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+env/
+
+# Local/editor files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Course handout kept local
+2026春季自然语言处理作业.pdf
