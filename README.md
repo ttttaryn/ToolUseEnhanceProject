@@ -129,7 +129,27 @@ cd /root/autodl-tmp/ToolUseforAgent
 bash scripts/autodl_setup.sh
 ```
 
-Prepare GRPO data:
+Prepare BFCL data. If `data/raw` does not exist yet, either create it and copy
+your JSON/JSONL files there, or clone BFCL directly on AutoDL:
+
+```bash
+mkdir -p external
+git clone --depth 1 https://github.com/ShishirPatil/gorilla.git external/gorilla
+```
+
+For a quick course-project GRPO dataset, copy only the single-turn and
+hallucination-oriented BFCL files you want to use for development:
+
+```bash
+mkdir -p data/raw
+cp external/gorilla/berkeley-function-call-leaderboard/bfcl_eval/data/BFCL_v4_simple_python.json data/raw/
+cp external/gorilla/berkeley-function-call-leaderboard/bfcl_eval/data/BFCL_v4_multiple.json data/raw/
+cp external/gorilla/berkeley-function-call-leaderboard/bfcl_eval/data/BFCL_v4_irrelevance.json data/raw/
+cp external/gorilla/berkeley-function-call-leaderboard/bfcl_eval/data/BFCL_v4_live_irrelevance.json data/raw/
+cp external/gorilla/berkeley-function-call-leaderboard/bfcl_eval/data/BFCL_v4_live_relevance.json data/raw/
+```
+
+Then convert the local files:
 
 ```bash
 python scripts/prepare_bfcl_dataset.py \
@@ -137,6 +157,10 @@ python scripts/prepare_bfcl_dataset.py \
   --output data/grpo_train.jsonl \
   --max-samples 3000
 ```
+
+For final benchmark reporting, do not train on the official test files you
+intend to report. Use the BFCL official `bfcl generate` / `bfcl evaluate` flow
+on Prompt-only, SFT, and SFT+GRPO checkpoints.
 
 Smoke run:
 

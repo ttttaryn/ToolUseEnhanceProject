@@ -18,6 +18,13 @@ SYSTEM_PROMPT = (
 
 
 def iter_records(path: Path) -> Iterable[dict[str, Any]]:
+    if not path.exists():
+        raise FileNotFoundError(
+            f"Input path does not exist: {path}. "
+            "Create the directory, copy BFCL JSON/JSONL files into it, or pass "
+            "the actual BFCL data file/directory path."
+        )
+
     if path.is_dir():
         for child in sorted(path.rglob("*")):
             if child.suffix.lower() in {".json", ".jsonl"}:

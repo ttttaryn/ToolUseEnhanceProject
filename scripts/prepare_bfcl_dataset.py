@@ -25,7 +25,23 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    if not args.input.exists():
+        parser.error(
+            f"input path does not exist: {args.input}\n"
+            "On AutoDL, either create data/raw and copy BFCL JSON files there, "
+            "or pass the cloned BFCL data directory, for example:\n"
+            "  git clone --depth 1 https://github.com/ShishirPatil/gorilla.git external/gorilla\n"
+            "  python scripts/prepare_bfcl_dataset.py "
+            "--input external/gorilla/berkeley-function-call-leaderboard/bfcl_eval/data "
+            "--output data/grpo_train.jsonl --max-samples 3000"
+        )
+
     converted = [item for item in (convert_record(record) for record in iter_records(args.input)) if item]
+    if not converted:
+        raise SystemExit(
+            f"No convertible records found under {args.input}. "
+            "Expected BFCL-style records with question/prompt, function/tools, and an answer field."
+        )
     rng = random.Random(args.seed)
     rng.shuffle(converted)
 
