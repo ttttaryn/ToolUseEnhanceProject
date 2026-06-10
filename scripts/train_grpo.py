@@ -1,21 +1,22 @@
 from __future__ import annotations
 
 import argparse
+import inspect
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from datasets import load_dataset
-from peft import LoraConfig, PeftModel
-from transformers import AutoModelForCausalLM, AutoTokenizer
-from trl import GRPOConfig, GRPOTrainer
-
 from trl_grpo_tooluse.rewards import full_rewards, selection_only_rewards
 
 
 def main() -> None:
+    from datasets import load_dataset
+    from peft import LoraConfig
+    from transformers import AutoTokenizer
+    from trl import GRPOConfig, GRPOTrainer
+
     args = parse_args()
     dataset = load_dataset("json", data_files=str(args.dataset), split="train")
     if args.max_train_samples:
@@ -44,25 +45,7 @@ def main() -> None:
         else full_rewards(include_hallucination_penalty=not args.disable_hallucination_penalty)
     )
 
-    training_args = GRPOConfig(
-        output_dir=str(args.output_dir),
-        learning_rate=args.learning_rate,
-        per_device_train_batch_size=args.per_device_train_batch_size,
-        gradient_accumulation_steps=args.gradient_accumulation_steps,
-        num_generations=args.num_generations,
-        max_prompt_length=args.max_prompt_length,
-        max_completion_length=args.max_completion_length,
-        max_steps=args.max_steps,
-        num_train_epochs=args.num_train_epochs,
-        beta=args.beta,
-        logging_steps=args.logging_steps,
-        save_steps=args.save_steps,
-        report_to=args.report_to,
-        bf16=args.bf16,
-        fp16=args.fp16,
-        use_vllm=args.use_vllm,
-        remove_unused_columns=False,
-    )
+    training_args = build_grpo_config(args, GRPOConfig)
 
     trainer = GRPOTrainer(
         model=model,
@@ -78,6 +61,9 @@ def main() -> None:
 
 
 def load_model(args: argparse.Namespace):
+    from peft import PeftModel
+    from transformers import AutoModelForCausalLM
+
     dtype = "auto"
     quantization_config = None
     if args.load_in_4bit:
@@ -101,6 +87,47 @@ def load_model(args: argparse.Namespace):
         model = PeftModel.from_pretrained(base, args.model_path, is_trainable=True)
         return model
     return args.model_path
+
+
+def build_grpo_config(args: argparse.Namespace, config_cls):
+    config_kwargs = {
+        "output_dir": str(args.output_dir),
+        "learning_rate": args.learning_rate,
+        "per_device_train_batch_size": args.per_device_train_batch_size,
+        "gradient_accumulation_steps": args.gradient_accumulation_steps,
+        "num_generations": args.num_generations,
+        "max_prompt_length": args.max_prompt_length,
+        "max_completion_length": args.max_completion_length,
+        "max_steps": args.max_steps,
+        "num_train_epochs": args.num_train_epochs,
+        "beta": args.beta,
+        "logging_steps": args.logging_steps,
+        "save_steps": args.save_steps,
+        "report_to": args.report_to,
+        "bf16": args.bf16,
+        "fp16": args.fp16,
+        "use_vllm": args.use_vllm,
+        "remove_unused_columns": False,
+    }
+    return instantiate_with_supported_kwargs(config_cls, config_kwargs, "GRPOConfig")
+
+
+def instantiate_with_supported_kwargs(cls, kwargs: dict, label: str):
+    signature = inspect.signature(cls.__init__)
+    supported = {
+        name
+        for name, parameter in signature.parameters.items()
+        if name != "self" and parameter.kind in {parameter.POSITIONAL_OR_KEYWORD, parameter.KEYWORD_ONLY}
+    }
+    accepted = {key: value for key, value in kwargs.items() if key in supported}
+    ignored = sorted(set(kwargs) - set(accepted))
+    if ignored:
+        print(
+            f"Warning: current TRL {label} does not accept these options and they will be ignored: "
+            + ", ".join(ignored),
+            file=sys.stderr,
+        )
+    return cls(**accepted)
 
 
 def parse_args() -> argparse.Namespace:
