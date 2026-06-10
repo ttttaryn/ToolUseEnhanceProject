@@ -119,7 +119,7 @@ The parser accepts JSON tool calls, OpenAI-style `tool_calls`, and simple
 `function(arguments)` strings so that partially valid model outputs can still
 receive informative rewards.
 
-## AutoDL A800 Setup
+## Setup
 
 Recommended instance:
 
