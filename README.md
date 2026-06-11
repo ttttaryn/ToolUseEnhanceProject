@@ -98,8 +98,26 @@ python scripts/prepare_toolace_dataset.py \
   --max-samples 3000
 ```
 
-If the Hugging Face download is slow on AutoDL, download ToolACE locally and pass
-the uploaded JSON/JSONL path with `--input`.
+If AutoDL cannot reach Hugging Face, download ToolACE locally from:
+
+```text
+https://huggingface.co/datasets/Team-ACE/ToolACE/resolve/main/data.json
+```
+
+Upload it to AutoDL, for example:
+
+```text
+/root/autodl-tmp/ToolUseEnhanceProject/data/toolace/data.json
+```
+
+Then convert the local file:
+
+```bash
+python scripts/prepare_toolace_dataset.py \
+  --input data/toolace/data.json \
+  --output data/grpo_train_toolace.jsonl \
+  --max-samples 3000
+```
 
 The converter expects each source record to contain a user request, available
 tools, a gold answer, and a task type. It accepts common field names such as

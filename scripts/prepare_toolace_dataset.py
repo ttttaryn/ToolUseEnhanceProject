@@ -47,7 +47,21 @@ def iter_local_or_hf(args: argparse.Namespace) -> Iterable[dict]:
     except ImportError as exc:
         raise SystemExit("Install datasets or pass --input with a local ToolACE file.") from exc
 
-    dataset = load_dataset(args.dataset_name, split=args.split)
+    try:
+        dataset = load_dataset(args.dataset_name, split=args.split)
+    except Exception as exc:
+        raise SystemExit(
+            f"Failed to download {args.dataset_name} from Hugging Face: {exc}\n"
+            "If AutoDL cannot reach Hugging Face, download this file locally:\n"
+            "  https://huggingface.co/datasets/Team-ACE/ToolACE/resolve/main/data.json\n"
+            "Upload it to AutoDL, for example:\n"
+            "  /root/autodl-tmp/ToolUseEnhanceProject/data/toolace/data.json\n"
+            "Then run:\n"
+            "  python scripts/prepare_toolace_dataset.py "
+            "--input data/toolace/data.json "
+            "--output data/grpo_train_toolace.jsonl "
+            "--max-samples 3000"
+        ) from exc
     for record in dataset:
         yield dict(record)
 
