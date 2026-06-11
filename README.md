@@ -90,6 +90,17 @@ python scripts/prepare_bfcl_dataset.py \
   --max-samples 1000
 ```
 
+To train GRPO with ToolACE instead of the synthetic data:
+
+```bash
+python scripts/prepare_toolace_dataset.py \
+  --output data/grpo_train_toolace.jsonl \
+  --max-samples 3000
+```
+
+If the Hugging Face download is slow on AutoDL, download ToolACE locally and pass
+the uploaded JSON/JSONL path with `--input`.
+
 The converter expects each source record to contain a user request, available
 tools, a gold answer, and a task type. It accepts common field names such as
 `question`, `prompt`, `tools`, `functions`, `ground_truth`, and `answer`.
@@ -163,6 +174,9 @@ accelerate launch scripts/train_grpo.py \
   --bf16 \
   2>&1 | tee logs/grpo_smoke.log
 ```
+
+For ToolACE training, replace the dataset path with
+`data/grpo_train_toolace.jsonl`.
 
 Then run the formal small-scale experiment:
 
