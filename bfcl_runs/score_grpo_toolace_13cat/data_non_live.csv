@@ -1,0 +1,2 @@
+Rank,Model,Non-Live Overall Acc,AST Summary,Simple AST,Python Simple AST,Java Simple AST,JavaScript Simple AST,Multiple AST,Parallel AST,Parallel Multiple AST,Irrelevance Detection
+1,Llama-3.2-1B-Instruct (FC),74.85%,74.85%,67.92%,83.75%,56.00%,64.00%,84.50%,75.00%,72.00%,90.42%

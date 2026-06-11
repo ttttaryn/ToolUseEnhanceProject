@@ -1,0 +1,2 @@
+Rank,Model,Live Overall Acc,AST Summary,Python Simple AST,Python Multiple AST,Python Parallel AST,Python Parallel Multiple AST,Irrelevance Detection,Relevance Detection
+1,Llama-3.2-1B-Instruct (FC),48.85%,48.85%,49.22%,49.29%,37.50%,33.33%,83.37%,75.00%
