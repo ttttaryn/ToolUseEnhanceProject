@@ -11,6 +11,9 @@ data/*
 !data/raw_selfbuilt/
 data/raw_selfbuilt/*
 !data/raw_selfbuilt/synthetic_tooluse_1000.jsonl
+!data/toolace/
+data/toolace/*
+!data/toolace/data.json
 outputs/
 .tmp/
 
