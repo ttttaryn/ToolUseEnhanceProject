@@ -32,7 +32,7 @@ def iter_records(path: Path) -> Iterable[dict[str, Any]]:
         return
 
     if path.suffix.lower() == ".jsonl":
-        with path.open("r", encoding="utf-8") as handle:
+        with path.open("r", encoding="utf-8-sig") as handle:
             for line in handle:
                 line = line.strip()
                 if line:
@@ -41,7 +41,7 @@ def iter_records(path: Path) -> Iterable[dict[str, Any]]:
                         yield obj
         return
 
-    with path.open("r", encoding="utf-8") as handle:
+    with path.open("r", encoding="utf-8-sig") as handle:
         obj = json.load(handle)
     if isinstance(obj, list):
         for item in obj:
